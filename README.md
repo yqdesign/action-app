@@ -2,8 +2,8 @@
 
 A minimal meeting action tracker. Add actions with an owner and due date, group them by owner, tick them off, and spot overdue items at a glance.
 
-- Single static page (index.html), no build step or dependencies
-- Data is saved in the browser's local storage (private to each browser and device)
+- Single static page (`index.html`), no build step or dependencies
+- Data is stored in a shared Supabase table (`actions`), so the whole team sees the same list
 
 ## Deploy on Vercel
 
@@ -13,4 +13,4 @@ A minimal meeting action tracker. Add actions with an owner and due date, group 
 
 ## Run locally
 
-Open index.html in a browser.
+Open `index.html` in a browser.

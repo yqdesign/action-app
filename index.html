@@ -147,6 +147,10 @@
   .link { background: none; border: 0; font: inherit; font-size: 0.95rem; color: var(--muted); cursor: pointer; text-decoration: underline; }
   .link:hover { color: var(--text); }
 
+  .status { margin: 10px 0 0; font-size: 0.9rem; color: var(--muted); min-height: 1.3em; }
+  .status.err { color: var(--red); font-weight: 600; }
+  .btn[disabled] { opacity: 0.6; cursor: wait; }
+
   @media (max-width: 560px) {
     body { font-size: 17px; }
     .row { grid-template-columns: 1fr; }
@@ -160,6 +164,7 @@
   <header>
     <h1>Action <span>Tracker</span></h1>
     <p>Capture every agreed action while it’s fresh. Nothing slips.</p>
+    <p class="status" id="status" role="status">Loading…</p>
   </header>
 
   <section class="stats" aria-label="Summary">
@@ -195,20 +200,46 @@
 
 <script>
 (function () {
-  var KEY = 'meeting-action-tracker-v1';
+  var SUPABASE_URL = 'https://cibihrmjgnbhvstfxkiy.supabase.co';
+  var SUPABASE_KEY = 'sb_publishable_UKPi5TBU9nAZIvJ3sVjmyA_f1NJMJ5X';
+  var API = SUPABASE_URL + '/rest/v1/actions';
   var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  var actions = load();
+  var actions = [];
+  var loaded = false;
 
-  function load() {
-    try {
-      var raw = localStorage.getItem(KEY);
-      var data = raw ? JSON.parse(raw) : [];
-      return Array.isArray(data) ? data : [];
-    } catch (e) { return []; }
+  var $ = function (id) { return document.getElementById(id); };
+
+  function api(path, opts) {
+    opts = opts || {};
+    var headers = { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' };
+    if (opts.prefer) headers['Prefer'] = opts.prefer;
+    return fetch(API + (path || ''), {
+      method: opts.method || 'GET',
+      headers: headers,
+      body: opts.body ? JSON.stringify(opts.body) : undefined
+    }).then(function (res) {
+      if (!res.ok) {
+        return res.text().then(function (t) { throw new Error('Request failed (' + res.status + ') ' + t.slice(0, 120)); });
+      }
+      return res.status === 204 ? null : res.text().then(function (t) { return t ? JSON.parse(t) : null; });
+    });
   }
-  function save() {
-    try { localStorage.setItem(KEY, JSON.stringify(actions)); } catch (e) {}
+
+  function fromRow(r) { return { id: r.id, task: r.task, owner: r.owner, due: r.due_date, done: !!r.done }; }
+
+  function setStatus(msg, isErr) {
+    var s = $('status');
+    s.textContent = msg;
+    s.className = 'status' + (isErr ? ' err' : '');
   }
+  function okStatus() {
+    var d = new Date();
+    setStatus('Shared team list · updated ' + pad(d.getHours()) + ':' + pad(d.getMinutes()));
+  }
+  function fail(e) {
+    setStatus('Couldn’t reach the server. ' + (e && e.message ? e.message : ''), true);
+  }
+
   function pad(n) { return n < 10 ? '0' + n : '' + n; }
   function todayStr() {
     var d = new Date();
@@ -225,9 +256,12 @@
     if (text !== undefined) e.textContent = text;
     return e;
   }
-  function newId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 
-  var $ = function (id) { return document.getElementById(id); };
+  function refresh() {
+    return api('?select=id,task,owner,due_date,done&order=created_at.asc')
+      .then(function (rows) { actions = rows.map(fromRow); loaded = true; render(); okStatus(); })
+      .catch(fail);
+  }
 
   function render() {
     var open = actions.filter(function (a) { return !a.done; }).length;
@@ -239,7 +273,6 @@
     $('statOverdue').classList.toggle('zero', overdue === 0);
     $('clearDone').style.display = done ? '' : 'none';
 
-    // owners
     var owners = [];
     actions.forEach(function (a) { if (owners.indexOf(a.owner) === -1) owners.push(a.owner); });
     owners.sort(function (x, y) { return x.toLowerCase() < y.toLowerCase() ? -1 : 1; });
@@ -252,8 +285,7 @@
     box.textContent = '';
 
     if (!actions.length) {
-      var c = el('section', 'card empty', 'No actions yet. Add the first one above.');
-      box.appendChild(c);
+      box.appendChild(el('section', 'card empty', loaded ? 'No actions yet. Add the first one above.' : 'Loading…'));
       return;
     }
 
@@ -281,19 +313,29 @@
         cb.type = 'checkbox';
         cb.checked = !!a.done;
         cb.setAttribute('aria-label', 'Mark done: ' + a.task);
-        cb.addEventListener('change', function () { a.done = cb.checked; save(); render(); });
+        cb.addEventListener('change', function () {
+          var prev = a.done;
+          a.done = cb.checked;
+          render();
+          api('?id=eq.' + encodeURIComponent(a.id), { method: 'PATCH', body: { done: a.done } })
+            .then(okStatus)
+            .catch(function (e) { a.done = prev; render(); fail(e); });
+        });
 
         var body = el('div', 'body');
         body.appendChild(el('div', 'task', a.task));
-        var dueTxt = 'Due ' + fmt(a.due) + (isOverdue(a) ? ' · Overdue' : '');
-        body.appendChild(el('div', 'due', dueTxt));
+        body.appendChild(el('div', 'due', 'Due ' + fmt(a.due) + (isOverdue(a) ? ' · Overdue' : '')));
 
         var del = el('button', 'del', '×');
         del.type = 'button';
         del.setAttribute('aria-label', 'Delete action');
         del.addEventListener('click', function () {
+          var snapshot = actions.slice();
           actions = actions.filter(function (x) { return x.id !== a.id; });
-          save(); render();
+          render();
+          api('?id=eq.' + encodeURIComponent(a.id), { method: 'DELETE' })
+            .then(okStatus)
+            .catch(function (e) { actions = snapshot; render(); fail(e); });
         });
 
         li.appendChild(cb); li.appendChild(body); li.appendChild(del);
@@ -317,34 +359,49 @@
     if (missing.length) { msg.textContent = 'Please add: ' + missing.join(', ') + '.'; return; }
     msg.textContent = '';
 
-    // reuse existing owner spelling (case-insensitive) to avoid duplicate cards
     var match = actions.filter(function (a) { return a.owner.toLowerCase() === owner.toLowerCase(); })[0];
     if (match) owner = match.owner;
 
-    actions.push({ id: newId(), task: task, owner: owner, due: due, done: false });
-    save();
-    $('task').value = '';
-    $('due').value = '';
-    $('task').focus();
-    render();
+    var btn = e.target.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    api('', { method: 'POST', prefer: 'return=representation', body: { task: task, owner: owner, due_date: due } })
+      .then(function (rows) {
+        actions.push(fromRow(rows[0]));
+        $('task').value = '';
+        $('due').value = defaultDue();
+        $('task').focus();
+        render();
+        okStatus();
+      })
+      .catch(function (err) { msg.textContent = 'Couldn’t save that action. Please try again.'; fail(err); })
+      .then(function () { btn.disabled = false; });
   });
 
   $('clearDone').addEventListener('click', function () {
     var n = actions.filter(function (a) { return a.done; }).length;
     if (!n) return;
-    if (confirm('Remove ' + n + ' completed action' + (n === 1 ? '' : 's') + '?')) {
+    if (confirm('Remove ' + n + ' completed action' + (n === 1 ? '' : 's') + ' for everyone?')) {
+      var snapshot = actions.slice();
       actions = actions.filter(function (a) { return !a.done; });
-      save(); render();
+      render();
+      api('?done=eq.true', { method: 'DELETE' })
+        .then(okStatus)
+        .catch(function (err) { actions = snapshot; render(); fail(err); });
     }
   });
 
-  // default due date: a week from today
-  (function () {
+  function defaultDue() {
     var d = new Date(); d.setDate(d.getDate() + 7);
-    $('due').value = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
-  })();
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  }
+  $('due').value = defaultDue();
+
+  // keep the team in sync
+  setInterval(refresh, 30000);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) refresh(); });
 
   render();
+  refresh();
 })();
 </script>
 </body>
