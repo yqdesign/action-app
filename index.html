@@ -16,6 +16,7 @@
     --accent-ink: #ffffff;
     --red: #c0392b;
     --red-bg: #fbeceb;
+    --green: #2e7d4f;
     color-scheme: light;
     box-sizing: border-box;
     padding-top: env(safe-area-inset-top, 0px);
@@ -33,6 +34,7 @@
       --accent-ink: #1c1b19;
       --red: #ef7a6c;
       --red-bg: #3a2522;
+      --green: #6fcf97;
       color-scheme: dark;
     }
   }
@@ -47,6 +49,7 @@
     --accent-ink: #1c1b19;
     --red: #ef7a6c;
     --red-bg: #3a2522;
+    --green: #6fcf97;
     color-scheme: dark;
   }
   html { scroll-padding-top: env(safe-area-inset-top, 0px); }
@@ -59,10 +62,15 @@
     font-size: 18px;
     line-height: 1.45;
   }
+  .hidden { display: none !important; }
   .wrap { max-width: 760px; margin: 0 auto; padding: 32px 20px 64px; }
   header h1 { margin: 0; font-size: 2rem; letter-spacing: -0.02em; }
   header h1 span { color: var(--accent); }
   header p { margin: 4px 0 0; color: var(--muted); font-size: 1.05rem; }
+
+  .userbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 14px; font-size: 0.95rem; color: var(--muted); }
+  .userbar strong { color: var(--text); }
+  .pill { display: inline-block; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--accent); border: 1px solid var(--accent); border-radius: 99px; padding: 1px 8px; margin-left: 6px; }
 
   .card {
     background: var(--card);
@@ -84,7 +92,7 @@
   form h2 { margin: 0 0 2px; font-size: 1.2rem; }
   .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   label { display: grid; gap: 6px; font-size: 0.9rem; color: var(--muted); font-weight: 600; }
-  input[type="text"], input[type="date"] {
+  input[type="text"], input[type="password"], input[type="date"] {
     font: inherit;
     font-size: 1.05rem;
     color: var(--text);
@@ -110,7 +118,11 @@
     cursor: pointer;
   }
   .btn:hover { filter: brightness(0.95); }
+  .btn.ghost { background: transparent; color: var(--text); border: 1px solid var(--border); padding: 7px 14px; font-weight: 600; font-size: 0.95rem; }
+  .btn.ghost:hover { background: var(--soft); filter: none; }
+  .btn[disabled] { opacity: 0.6; cursor: wait; }
   .msg { color: var(--red); font-size: 0.95rem; min-height: 1.2em; margin: 0; }
+  .msg.ok { color: var(--green); }
 
   .owner-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
   .owner-head h3 { margin: 0; font-size: 1.25rem; }
@@ -149,7 +161,13 @@
 
   .status { margin: 10px 0 0; font-size: 0.9rem; color: var(--muted); min-height: 1.3em; }
   .status.err { color: var(--red); font-weight: 600; }
-  .btn[disabled] { opacity: 0.6; cursor: wait; }
+
+  .login { max-width: 420px; margin: 24px auto 0; }
+  .team-list li { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border); }
+  .team-list li:first-child { border-top: 0; }
+  .team-list .u { font-weight: 600; }
+  .team-list .r { color: var(--muted); font-size: 0.9rem; }
+  .hint { color: var(--muted); font-size: 0.9rem; margin: 0; }
 
   @media (max-width: 560px) {
     body { font-size: 17px; }
@@ -164,69 +182,230 @@
   <header>
     <h1>Action <span>Tracker</span></h1>
     <p>Capture every agreed action while it’s fresh. Nothing slips.</p>
-    <p class="status" id="status" role="status">Loading…</p>
+    <div class="userbar hidden" id="userBar">
+      <span>Signed in as <strong id="whoName"></strong><span class="pill hidden" id="whoRole">Admin</span></span>
+      <button class="btn ghost" id="btnPw" type="button">Change password</button>
+      <button class="btn ghost" id="btnSignOut" type="button">Sign out</button>
+    </div>
+    <p class="status" id="status" role="status"></p>
   </header>
 
-  <section class="stats" aria-label="Summary">
-    <div class="stat open"><div class="n" id="nOpen">0</div><div class="l">Open</div></div>
-    <div class="stat done"><div class="n" id="nDone">0</div><div class="l">Done</div></div>
-    <div class="stat overdue zero" id="statOverdue"><div class="n" id="nOverdue">0</div><div class="l">Overdue</div></div>
-  </section>
-
-  <section class="card">
-    <form id="form" autocomplete="off">
-      <h2>Add an action</h2>
-      <label>Action
-        <input type="text" id="task" placeholder="e.g. Send revised quote to client" maxlength="200">
+  <!-- Sign in -->
+  <section class="card login" id="loginView">
+    <form id="loginForm" autocomplete="on">
+      <h2>Sign in</h2>
+      <label>Username
+        <input type="text" id="loginUser" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="e.g. priya">
       </label>
-      <div class="row">
-        <label>Owner
-          <input type="text" id="owner" list="owners" placeholder="Who’s doing it?" maxlength="60">
-          <datalist id="owners"></datalist>
-        </label>
-        <label>Due date
-          <input type="date" id="due">
-        </label>
-      </div>
-      <p class="msg" id="msg" role="alert"></p>
-      <button class="btn" type="submit">Add action</button>
+      <label>Password
+        <input type="password" id="loginPass" name="password" autocomplete="current-password">
+      </label>
+      <p class="msg" id="loginMsg" role="alert"></p>
+      <button class="btn" type="submit" id="loginBtn">Sign in</button>
     </form>
   </section>
 
-  <div id="groups"></div>
+  <!-- App -->
+  <div id="appView" class="hidden">
+    <section class="card hidden" id="pwCard">
+      <form id="pwForm" autocomplete="off">
+        <h2>Change your password</h2>
+        <label>New password
+          <input type="password" id="newPass" autocomplete="new-password" placeholder="At least 6 characters">
+        </label>
+        <p class="msg" id="pwMsg" role="alert"></p>
+        <button class="btn" type="submit">Save new password</button>
+      </form>
+    </section>
 
-  <div class="foot"><button class="link" id="clearDone" type="button">Clear completed actions</button></div>
+    <section class="stats" aria-label="Summary">
+      <div class="stat open"><div class="n" id="nOpen">0</div><div class="l">Open</div></div>
+      <div class="stat done"><div class="n" id="nDone">0</div><div class="l">Done</div></div>
+      <div class="stat overdue zero" id="statOverdue"><div class="n" id="nOverdue">0</div><div class="l">Overdue</div></div>
+    </section>
+
+    <section class="card">
+      <form id="form" autocomplete="off">
+        <h2>Add an action</h2>
+        <label>Action
+          <input type="text" id="task" placeholder="e.g. Send revised quote to client" maxlength="200">
+        </label>
+        <div class="row">
+          <label>Owner
+            <input type="text" id="owner" list="owners" placeholder="Who’s doing it?" maxlength="60">
+            <datalist id="owners"></datalist>
+          </label>
+          <label>Due date
+            <input type="date" id="due">
+          </label>
+        </div>
+        <p class="msg" id="msg" role="alert"></p>
+        <button class="btn" type="submit">Add action</button>
+      </form>
+    </section>
+
+    <div id="groups"></div>
+
+    <div class="foot"><button class="link" id="clearDone" type="button">Clear completed actions</button></div>
+
+    <!-- Admin only -->
+    <section class="card hidden" id="teamCard">
+      <h2 style="margin:0 0 8px;font-size:1.2rem">Team members</h2>
+      <ul class="team-list" id="teamList"></ul>
+      <form id="teamForm" autocomplete="off" style="margin-top:16px">
+        <div class="row">
+          <label>New username
+            <input type="text" id="newUser" autocapitalize="none" spellcheck="false" placeholder="e.g. sam" maxlength="30">
+          </label>
+          <label>Initial password
+            <input type="text" id="newUserPass" autocomplete="off" placeholder="At least 6 characters">
+          </label>
+        </div>
+        <p class="hint">Share the initial password with them directly and ask them to change it after signing in.</p>
+        <p class="msg" id="teamMsg" role="alert"></p>
+        <button class="btn" type="submit">Add user</button>
+      </form>
+    </section>
+  </div>
 </div>
 
 <script>
 (function () {
   var SUPABASE_URL = 'https://cibihrmjgnbhvstfxkiy.supabase.co';
   var SUPABASE_KEY = 'sb_publishable_UKPi5TBU9nAZIvJ3sVjmyA_f1NJMJ5X';
-  var API = SUPABASE_URL + '/rest/v1/actions';
+  var EMAIL_DOMAIN = '@actiontracker.example';
+  var SESSION_KEY = 'action-tracker-session-v1';
   var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  var session = loadSession();
+  var profile = null;
   var actions = [];
   var loaded = false;
+  var pollTimer = null;
+  var refreshing = null;
 
   var $ = function (id) { return document.getElementById(id); };
+  function pad(n) { return n < 10 ? '0' + n : '' + n; }
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+  function show(id, on) { $(id).classList.toggle('hidden', !on); }
+  function setMsg(id, text, ok) { var m = $(id); m.textContent = text || ''; m.className = 'msg' + (ok ? ' ok' : ''); }
 
-  function api(path, opts) {
+  /* ---------- session storage ---------- */
+  function loadSession() {
+    try { var r = localStorage.getItem(SESSION_KEY); return r ? JSON.parse(r) : null; } catch (e) { return null; }
+  }
+  function storeSession(s) {
+    session = s;
+    try { if (s) localStorage.setItem(SESSION_KEY, JSON.stringify(s)); else localStorage.removeItem(SESSION_KEY); } catch (e) {}
+  }
+
+  /* ---------- auth (Supabase Auth REST) ---------- */
+  function authReq(path, method, body, token) {
+    var h = { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' };
+    if (token) h['Authorization'] = 'Bearer ' + token;
+    return fetch(SUPABASE_URL + path, { method: method, headers: h, body: body ? JSON.stringify(body) : undefined })
+      .then(function (res) {
+        return res.text().then(function (t) {
+          var j = null;
+          try { j = t ? JSON.parse(t) : null; } catch (e) {}
+          if (!res.ok) {
+            var err = new Error((j && (j.msg || j.message || j.error_description || j.error)) || ('Request failed (' + res.status + ')'));
+            err.status = res.status;
+            throw err;
+          }
+          return j;
+        });
+      });
+  }
+  function toSession(j, fallbackUserId) {
+    return {
+      access_token: j.access_token,
+      refresh_token: j.refresh_token,
+      expires_at: Math.floor(Date.now() / 1000) + (j.expires_in || 3600),
+      user_id: (j.user && j.user.id) || fallbackUserId
+    };
+  }
+  function signIn(username, password) {
+    return authReq('/auth/v1/token?grant_type=password', 'POST',
+      { email: username.toLowerCase() + EMAIL_DOMAIN, password: password })
+      .then(function (j) { storeSession(toSession(j)); });
+  }
+  function refreshSession() {
+    if (!session) return Promise.reject(new Error('Signed out'));
+    if (refreshing) return refreshing;
+    refreshing = authReq('/auth/v1/token?grant_type=refresh_token', 'POST', { refresh_token: session.refresh_token })
+      .then(function (j) { storeSession(toSession(j, session.user_id)); refreshing = null; })
+      .catch(function (e) { refreshing = null; throw e; });
+    return refreshing;
+  }
+  function validToken() {
+    if (!session) return Promise.reject(new Error('Signed out'));
+    if (session.expires_at - 60 < Date.now() / 1000) {
+      return refreshSession().then(function () { return session.access_token; });
+    }
+    return Promise.resolve(session.access_token);
+  }
+  function forceSignOut(message) {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    storeSession(null);
+    profile = null; actions = []; loaded = false;
+    setStatus('');
+    show('appView', false); show('userBar', false); show('loginView', true);
+    $('loginPass').value = '';
+    setMsg('loginMsg', message || '');
+  }
+
+  /* ---------- data API ---------- */
+  function rest(path, opts, retried) {
     opts = opts || {};
-    var headers = { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' };
-    if (opts.prefer) headers['Prefer'] = opts.prefer;
-    return fetch(API + (path || ''), {
-      method: opts.method || 'GET',
-      headers: headers,
-      body: opts.body ? JSON.stringify(opts.body) : undefined
+    return validToken().then(function (tok) {
+      var h = { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + tok, 'Content-Type': 'application/json' };
+      if (opts.prefer) h['Prefer'] = opts.prefer;
+      return fetch(SUPABASE_URL + '/rest/v1' + path, {
+        method: opts.method || 'GET', headers: h,
+        body: opts.body ? JSON.stringify(opts.body) : undefined
+      });
     }).then(function (res) {
+      if (res.status === 401 && !retried) {
+        return refreshSession().then(function () { return rest(path, opts, true); });
+      }
+      if (res.status === 401) {
+        forceSignOut('Your session has expired. Please sign in again.');
+        throw new Error('Session expired');
+      }
       if (!res.ok) {
-        return res.text().then(function (t) { throw new Error('Request failed (' + res.status + ') ' + t.slice(0, 120)); });
+        return res.text().then(function (t) {
+          var m = t;
+          try { m = JSON.parse(t).message || t; } catch (e) {}
+          throw new Error(String(m).slice(0, 160));
+        });
       }
       return res.status === 204 ? null : res.text().then(function (t) { return t ? JSON.parse(t) : null; });
     });
   }
 
+  /* ---------- dates ---------- */
+  function todayStr() {
+    var d = new Date();
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  }
+  function fmt(s) {
+    var p = s.split('-');
+    return parseInt(p[2], 10) + ' ' + MONTHS[parseInt(p[1], 10) - 1] + ' ' + p[0];
+  }
+  function defaultDue() {
+    var d = new Date(); d.setDate(d.getDate() + 7);
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  }
+  function isOverdue(a) { return !a.done && a.due < todayStr(); }
   function fromRow(r) { return { id: r.id, task: r.task, owner: r.owner, due: r.due_date, done: !!r.done }; }
 
+  /* ---------- status ---------- */
   function setStatus(msg, isErr) {
     var s = $('status');
     s.textContent = msg;
@@ -236,31 +415,14 @@
     var d = new Date();
     setStatus('Shared team list · updated ' + pad(d.getHours()) + ':' + pad(d.getMinutes()));
   }
-  function fail(e) {
-    setStatus('Couldn’t reach the server. ' + (e && e.message ? e.message : ''), true);
-  }
+  function fail(e) { setStatus('Something went wrong. ' + (e && e.message ? e.message : ''), true); }
 
-  function pad(n) { return n < 10 ? '0' + n : '' + n; }
-  function todayStr() {
-    var d = new Date();
-    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
-  }
-  function fmt(s) {
-    var p = s.split('-');
-    return parseInt(p[2], 10) + ' ' + MONTHS[parseInt(p[1], 10) - 1] + ' ' + p[0];
-  }
-  function isOverdue(a) { return !a.done && a.due < todayStr(); }
-  function el(tag, cls, text) {
-    var e = document.createElement(tag);
-    if (cls) e.className = cls;
-    if (text !== undefined) e.textContent = text;
-    return e;
-  }
-
+  /* ---------- actions ---------- */
   function refresh() {
-    return api('?select=id,task,owner,due_date,done&order=created_at.asc')
+    if (!session) return Promise.resolve();
+    return rest('/actions?select=id,task,owner,due_date,done&order=created_at.asc')
       .then(function (rows) { actions = rows.map(fromRow); loaded = true; render(); okStatus(); })
-      .catch(fail);
+      .catch(function (e) { if (session) fail(e); });
   }
 
   function render() {
@@ -317,7 +479,7 @@
           var prev = a.done;
           a.done = cb.checked;
           render();
-          api('?id=eq.' + encodeURIComponent(a.id), { method: 'PATCH', body: { done: a.done } })
+          rest('/actions?id=eq.' + encodeURIComponent(a.id), { method: 'PATCH', body: { done: a.done } })
             .then(okStatus)
             .catch(function (e) { a.done = prev; render(); fail(e); });
         });
@@ -333,7 +495,7 @@
           var snapshot = actions.slice();
           actions = actions.filter(function (x) { return x.id !== a.id; });
           render();
-          api('?id=eq.' + encodeURIComponent(a.id), { method: 'DELETE' })
+          rest('/actions?id=eq.' + encodeURIComponent(a.id), { method: 'DELETE' })
             .then(okStatus)
             .catch(function (e) { actions = snapshot; render(); fail(e); });
         });
@@ -351,20 +513,19 @@
     var task = $('task').value.trim();
     var owner = $('owner').value.trim();
     var due = $('due').value;
-    var msg = $('msg');
     var missing = [];
     if (!task) missing.push('action');
     if (!owner) missing.push('owner');
     if (!due) missing.push('due date');
-    if (missing.length) { msg.textContent = 'Please add: ' + missing.join(', ') + '.'; return; }
-    msg.textContent = '';
+    if (missing.length) { setMsg('msg', 'Please add: ' + missing.join(', ') + '.'); return; }
+    setMsg('msg', '');
 
     var match = actions.filter(function (a) { return a.owner.toLowerCase() === owner.toLowerCase(); })[0];
     if (match) owner = match.owner;
 
     var btn = e.target.querySelector('button[type="submit"]');
     btn.disabled = true;
-    api('', { method: 'POST', prefer: 'return=representation', body: { task: task, owner: owner, due_date: due } })
+    rest('/actions', { method: 'POST', prefer: 'return=representation', body: { task: task, owner: owner, due_date: due } })
       .then(function (rows) {
         actions.push(fromRow(rows[0]));
         $('task').value = '';
@@ -373,7 +534,7 @@
         render();
         okStatus();
       })
-      .catch(function (err) { msg.textContent = 'Couldn’t save that action. Please try again.'; fail(err); })
+      .catch(function (err) { setMsg('msg', 'Couldn’t save that action. Please try again.'); fail(err); })
       .then(function () { btn.disabled = false; });
   });
 
@@ -384,24 +545,112 @@
       var snapshot = actions.slice();
       actions = actions.filter(function (a) { return !a.done; });
       render();
-      api('?done=eq.true', { method: 'DELETE' })
+      rest('/actions?done=eq.true', { method: 'DELETE' })
         .then(okStatus)
         .catch(function (err) { actions = snapshot; render(); fail(err); });
     }
   });
 
-  function defaultDue() {
-    var d = new Date(); d.setDate(d.getDate() + 7);
-    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  /* ---------- sign in / out ---------- */
+  $('loginForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var user = $('loginUser').value.trim().toLowerCase();
+    var pass = $('loginPass').value;
+    if (!user || !pass) { setMsg('loginMsg', 'Please enter your username and password.'); return; }
+    setMsg('loginMsg', '');
+    var btn = $('loginBtn');
+    btn.disabled = true;
+    signIn(user, pass)
+      .then(function () { $('loginPass').value = ''; return start(); })
+      .catch(function (err) {
+        storeSession(null);
+        setMsg('loginMsg', err.status === 400 ? 'Incorrect username or password.' : 'Couldn’t sign in. ' + err.message);
+      })
+      .then(function () { btn.disabled = false; });
+  });
+
+  $('btnSignOut').addEventListener('click', function () {
+    var token = session && session.access_token;
+    if (token) { authReq('/auth/v1/logout', 'POST', null, token).catch(function () {}); }
+    forceSignOut('');
+  });
+
+  /* ---------- change password ---------- */
+  $('btnPw').addEventListener('click', function () {
+    var card = $('pwCard');
+    var willShow = card.classList.contains('hidden');
+    show('pwCard', willShow);
+    setMsg('pwMsg', '');
+    if (willShow) $('newPass').focus();
+  });
+  $('pwForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var p = $('newPass').value;
+    if (p.length < 6) { setMsg('pwMsg', 'Password must be at least 6 characters.'); return; }
+    validToken()
+      .then(function (tok) { return authReq('/auth/v1/user', 'PUT', { password: p }, tok); })
+      .then(function () { $('newPass').value = ''; setMsg('pwMsg', 'Password updated.', true); })
+      .catch(function (err) { setMsg('pwMsg', err.message || 'Couldn’t update the password.'); });
+  });
+
+  /* ---------- team (admin) ---------- */
+  function loadTeam() {
+    return rest('/profiles?select=username,display_name,role&order=username.asc').then(function (rows) {
+      var ul = $('teamList');
+      ul.textContent = '';
+      rows.forEach(function (r) {
+        var li = el('li');
+        li.appendChild(el('span', 'u', r.display_name ? r.display_name + ' (' + r.username + ')' : r.username));
+        li.appendChild(el('span', 'r', r.role === 'admin' ? 'Admin' : 'Member'));
+        ul.appendChild(li);
+      });
+    });
   }
-  $('due').value = defaultDue();
+  $('teamForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var u = $('newUser').value.trim().toLowerCase();
+    var p = $('newUserPass').value;
+    if (!/^[a-z0-9._-]{3,30}$/.test(u)) { setMsg('teamMsg', 'Username must be 3 to 30 characters: letters, numbers, dot, dash or underscore.'); return; }
+    if (p.length < 6) { setMsg('teamMsg', 'Password must be at least 6 characters.'); return; }
+    setMsg('teamMsg', '');
+    var btn = e.target.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    rest('/rpc/create_app_user', { method: 'POST', body: { p_username: u, p_password: p } })
+      .then(function () {
+        $('newUser').value = ''; $('newUserPass').value = '';
+        setMsg('teamMsg', 'Added ' + u + '.', true);
+        return loadTeam();
+      })
+      .catch(function (err) { setMsg('teamMsg', err.message || 'Couldn’t add that user.'); })
+      .then(function () { btn.disabled = false; });
+  });
 
-  // keep the team in sync
-  setInterval(refresh, 30000);
-  document.addEventListener('visibilitychange', function () { if (!document.hidden) refresh(); });
+  /* ---------- start ---------- */
+  function start() {
+    return rest('/profiles?id=eq.' + encodeURIComponent(session.user_id) + '&select=username,display_name,role')
+      .then(function (rows) {
+        profile = rows[0] || { username: 'user', display_name: 'User', role: 'member' };
+        $('whoName').textContent = profile.display_name || profile.username;
+        show('whoRole', profile.role === 'admin');
+        show('teamCard', profile.role === 'admin');
+        show('loginView', false); show('appView', true); show('userBar', true);
+        show('pwCard', false);
+        $('due').value = defaultDue();
+        render();
+        if (!pollTimer) pollTimer = setInterval(refresh, 30000);
+        var jobs = [refresh()];
+        if (profile.role === 'admin') jobs.push(loadTeam().catch(function () {}));
+        return Promise.all(jobs);
+      });
+  }
 
-  render();
-  refresh();
+  document.addEventListener('visibilitychange', function () { if (!document.hidden && session) refresh(); });
+
+  if (session) {
+    start().catch(function () { forceSignOut('Please sign in again.'); });
+  } else {
+    show('loginView', true);
+  }
 })();
 </script>
 </body>
